@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>我的記帳</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+:root {
+  --bg:       #EFF6FF;
+  --card:     #FFFFFF;
+  --card2:    #F8FBFF;
+  --border:   rgba(59,130,246,0.1);
+  --shadow:   0 4px 20px rgba(59,130,246,0.08), 0 1px 4px rgba(0,0,0,0.04);
+  --text:     #1E3A5F;
+  --muted:    #6B90B8;
+  --light:    #A0BDD8;
+  --blue:     #3B82F6;
+  --blue-dk:  #2563EB;
+  --blue-bg:  rgba(59,130,246,0.08);
+  --red:      #F87171;
+  --red-bg:   rgba(248,113,113,0.1);
+  --amber:    #F59E0B;
+  --amber-bg: rgba(245,158,11,0.1);
+  --sky:      #60A5FA;
+  --income:   #3B82F6;
+  --expense:  #F87171;
+  --invest:   #F59E0B;
+}
+
+html, body { height:100%; background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; overflow:hidden; -webkit-font-smoothing:antialiased; }
+.app { max-width:430px; margin:0 auto; height:100vh; display:flex; flex-direction:column; position:relative; overflow:hidden; }
+
+/* ── Login ── */
+.login-screen { position:fixed; inset:0; background:var(--bg); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:9999; padding:40px 32px; transition:opacity 0.4s ease; }
+.login-screen.hidden { opacity:0; pointer-events:none; }
+.login-screen.gone { display:none; }
+.login-logo { font-size:48px; margin-bottom:16px; }
+.login-title { font-size:24px; font-weight:800; color:var(--text); letter-spacing:-0.03em; margin-bottom:6px; }
+.login-sub { font-size:13px; color:var(--muted); margin-bottom:40px; font-weight:300; }
+.pin-dots { display:flex; gap:14px; margin-bottom:32px; }
+.pin-dot { width:14px; height:14px; border-radius:50%; background:#DBEAFE; transition:background 0.2s; }
+.pin-dot.filled { background:var(--blue); }
+.pin-keypad { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; width:100%; max-width:280px; }
+.pin-key { background:var(--card); border:1px solid #DBEAFE; border-radius:18px; padding:18px 0; font-size:22px; font-weight:600; color:var(--text); cursor:pointer; text-align:center; transition:background 0.15s,transform 0.1s; user-select:none; box-shadow:0 2px 8px rgba(59,130,246,0.06); }
+.pin-key:active { background:#EFF6FF; transform:scale(0.95); }
+.pin-key.del { font-size:18px; color:var(--muted); }
+.pin-key.empty { visibility:hidden; }
+.login-error { font-size:13px; color:var(--red); margin-top:16px; min-height:20px; font-weight:500; }
+
+
+.page { flex:1; overflow-y:auto; overflow-x:hidden; padding:0 0 84px; display:none; scrollbar-width:none; }
+.page::-webkit-scrollbar { display:none; }
+.page.active { display:block; }
+
+/* ── Loading ── */
+.loading-overlay { position:fixed; inset:0; background:var(--bg); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:999; gap:16px; }
+.loading-overlay.hidden { display:none; }
+.loading-spinner { width:36px; height:36px; border:3px solid var(--border); border-top-color:var(--blue); border-radius:50%; animation:spin 0.8s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.loading-text { font-size:13px; color:var(--muted); font-weight:400; }
+
+/* ── Header ── */
+.header { padding:52px 20px 12px; position:sticky; top:0; z-index:10; background:var(--bg); }
+.header-row { display:flex; justify-content:space-between; align-items:center; }
+.greeting { font-size:12px; color:var(--muted); font-weight:300; margin-bottom:2px; letter-spacing:0.02em; }
+.page-title { font-size:22px; font-weight:700; color:var(--text); letter-spacing:-0.03em; }
+.refresh-btn {
+  width:38px; height:38px;
+  background:var(--card);
+  border-radius:13px;
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:var(--shadow);
+  cursor:pointer; border:none;
+  transition:transform 0.15s;
+  flex-shrink:0;
+}
+.refresh-btn:active { transform:scale(0.93); }
+.refresh-btn svg { width:16px; height:16px; color:var(--blue); }
+.refresh-btn.spinning svg { animation:spin 0.8s linear infinite; }
+
+/* ── Error banner ── */
+.error-banner { background:rgba(248,113,113,0.08); border:1px solid rgba(248,113,113,0.3); border-radius:14px; padding:10px 16px; margin:0 20px 8px; font-size:12px; color:var(--red); display:none; font-weight:400; }
+.error-banner.show { display:block; }
+
+/* ── Hero Card ── */
+.hero-wrap { padding:4px 20px 0; }
+.hero-card {
+  background:linear-gradient(135deg, var(--blue) 0%, var(--blue-dk) 100%);
+  border-radius:24px; padding:22px;
+  position:relative; overflow:hidden;
+}
+.hero-card::before { content:''; position:absolute; top:-30px; right:-30px; width:120px; height:120px; background:rgba(255,255,255,0.12); border-radius:50%; }
+.hero-card::after  { content:''; position:absolute; bottom:-20px; right:40px; width:70px; height:70px; background:rgba(255,255,255,0.07); border-radius:50%; }
+.hero-tag { display:inline-flex; align-items:center; gap:5px; background:rgba(255,255,255,0.18); color:#fff; border-radius:20px; padding:3px 10px; font-size:10px; font-weight:500; margin-bottom:8px; letter-spacing:0.02em; }
+.hero-tag-dot { width:5px; height:5px; border-radius:50%; background:#fff; }
+.hero-amount { font-size:36px; font-weight:800; color:#fff; letter-spacing:-0.03em; margin-bottom:18px; line-height:1; }
+.hero-amount span { font-size:20px; font-weight:300; opacity:0.7; margin-right:1px; }
+.hero-stats { display:flex; border-top:1px solid rgba(255,255,255,0.18); padding-top:16px; }
+.hero-stat { flex:1; }
+.hero-stat+.hero-stat { border-left:1px solid rgba(255,255,255,0.18); padding-left:14px; }
+.hs-label { font-size:10px; color:rgba(255,255,255,0.55); font-weight:300; margin-bottom:3px; }
+.hs-val { font-size:14px; font-weight:700; color:#fff; }
+
+/* ── Section ── */
+.section { padding:18px 20px 0; }
+.section-title { font-size:14px; font-weight:600; color:var(--text); letter-spacing:-0.01em; margin-bottom:10px; }
+
+/* ── Card ── */
+.card { background:var(--card); border-radius:20px; padding:16px; box-shadow:var(--shadow); margin:0 0 0; }
+
+/* ── Chart Info Card ── */
+.chart-info-row { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:12px; }
+.chart-info-card { background:var(--bg); border-radius:14px; padding:10px 12px; border:1px solid var(--border); flex:1; }
+.ci-month { font-size:9px; color:var(--blue); font-weight:600; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:7px; }
+.ci-row { display:flex; align-items:center; gap:5px; margin-bottom:3px; }
+.ci-dot { width:5px; height:5px; border-radius:50%; flex-shrink:0; }
+.ci-lbl { font-size:10px; color:var(--muted); flex:1; font-weight:300; }
+.ci-val { font-size:11px; font-weight:700; }
+.lc-legend-col { display:flex; flex-direction:column; gap:5px; padding-top:2px; }
+.lc-item { display:flex; align-items:center; gap:5px; font-size:10px; color:var(--muted); font-weight:300; }
+.lc-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+.lc-line { width:12px; height:2px; border-radius:1px; flex-shrink:0; }
+
+/* ── SVG Chart ── */
+.x-labels { display:flex; padding:6px 0 0; }
+.x-lbl { flex:1; font-size:9px; color:var(--light); text-align:center; font-weight:400; }
+.x-lbl.sel { color:var(--blue); font-weight:600; }
+
+/* ── Donut ── */
+.donut-big-wrap { display:flex; flex-direction:column; align-items:center; position:relative; }
+.cat-month-nav { display:flex; align-items:center; justify-content:center; gap:14px; margin-bottom:12px; }
+.cat-month-btn { width:28px; height:28px; background:var(--card); border-radius:9px; display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:var(--shadow); border:none; color:var(--blue); font-size:15px; font-weight:600; }
+.cat-month-label { font-size:13px; font-weight:600; color:var(--text); min-width:90px; text-align:center; }
+.donut-legend-row { display:inline-flex; align-items:center; gap:5px; padding:4px 10px; border-radius:20px; background:var(--bg); border:1px solid var(--border); }
+.dleg-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+.dleg-name { font-size:11px; color:var(--muted); font-weight:400; }
+.donut-tags-wrap { display:flex; flex-wrap:wrap; gap:6px; margin-top:14px; justify-content:center; }
+
+/* ── Category list ── */
+.cat-list-row { display:flex; align-items:center; gap:12px; background:var(--card); border-radius:16px; padding:12px 14px; margin-bottom:8px; box-shadow:var(--shadow); }
+.cat-icon-wrap { width:40px; height:40px; border-radius:13px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; }
+.cat-info { flex:1; min-width:0; }
+.cat-name { font-size:13px; font-weight:600; color:var(--text); margin-bottom:4px; }
+.cat-bar-track { height:3px; background:var(--bg); border-radius:2px; overflow:hidden; }
+.cat-bar-fill { height:100%; border-radius:2px; }
+.cat-right { text-align:right; }
+.cat-val { font-size:13px; font-weight:700; }
+.cat-pct { font-size:10px; color:var(--light); margin-top:1px; }
+
+/* ── TX List ── */
+.tx-list { display:flex; flex-direction:column; gap:0; }
+.tx-row { display:flex; align-items:center; gap:11px; padding:11px 0; border-bottom:1px solid var(--bg); }
+.tx-row:last-child { border-bottom:none; }
+.tx-icon-wrap { width:40px; height:40px; border-radius:13px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; }
+.tx-info { flex:1; min-width:0; }
+.tx-name { font-size:13px; font-weight:600; color:var(--text); margin-bottom:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.tx-meta { font-size:10px; color:var(--light); font-weight:300; }
+.tx-amt { font-size:14px; font-weight:700; white-space:nowrap; }
+
+/* ── Detail ── */
+.sticky-top { position:sticky; top:88px; z-index:9; background:var(--bg); padding-bottom:8px; }
+.search-wrap { padding:0 0 8px; }
+.search-box { display:flex; align-items:center; gap:10px; background:var(--card); border-radius:14px; padding:11px 14px; box-shadow:var(--shadow); }
+.search-box input { flex:1; background:transparent; border:none; outline:none; color:var(--text); font-size:13px; font-family:'Inter',sans-serif; font-weight:400; }
+.search-box input::placeholder { color:var(--light); }
+.search-ico { font-size:14px; color:var(--light); }
+.chips-row { display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; padding-bottom:2px; }
+.chips-row::-webkit-scrollbar { display:none; }
+.chip { flex-shrink:0; padding:5px 12px; border-radius:20px; font-size:11px; font-weight:500; border:1px solid #DBEAFE; color:var(--muted); cursor:pointer; background:var(--card); font-family:'Inter',sans-serif; transition:all 0.18s; }
+.chip.active { background:var(--blue); border-color:var(--blue); color:#fff; font-weight:600; }
+.date-card { background:var(--card); border-radius:16px; padding:12px 14px; box-shadow:var(--shadow); margin-top:8px; }
+.date-label { font-size:9px; color:var(--light); font-weight:500; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:8px; }
+.date-row { display:flex; align-items:center; gap:8px; }
+.date-in { flex:1; background:var(--bg); border:1px solid var(--border); border-radius:9px; padding:7px 9px; color:var(--text); font-size:12px; font-family:'Inter',monospace; font-weight:400; outline:none; width:100%; }
+.date-sep { color:var(--light); font-size:12px; }
+.date-clear { font-size:10px; color:var(--blue); margin-top:8px; cursor:pointer; display:inline-block; font-weight:500; }
+.results-row { display:flex; justify-content:space-between; align-items:center; padding:12px 0 8px; }
+.results-count { font-size:11px; color:var(--light); font-weight:300; }
+.results-sum { font-size:13px; font-weight:700; }
+.empty { text-align:center; padding:48px 24px; }
+.empty-ico { font-size:36px; margin-bottom:10px; }
+.empty-txt { font-size:13px; color:var(--light); font-weight:300; }
+.highlight { background:rgba(59,130,246,0.15); border-radius:3px; padding:0 1px; }
+
+/* ── Salary ── */
+.salary-hero { background:linear-gradient(135deg, #1E3A5F 0%, #2D5A8E 100%); border-radius:24px; padding:24px; text-align:center; position:relative; overflow:hidden; margin-bottom:0; }
+.salary-hero::before { content:''; position:absolute; top:-25px; right:-15px; width:90px; height:90px; background:rgba(59,130,246,0.15); border-radius:50%; }
+.sal-label { font-size:9px; color:rgba(255,255,255,0.45); font-weight:400; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:6px; }
+.sal-amount { font-size:42px; font-weight:800; color:#fff; letter-spacing:-0.03em; margin-bottom:2px; line-height:1; }
+.sal-amount span { font-size:24px; font-weight:300; opacity:0.55; }
+.sal-sub { font-size:11px; color:rgba(255,255,255,0.35); margin-bottom:18px; font-weight:300; }
+.progress-bar-wrap { height:5px; background:rgba(255,255,255,0.12); border-radius:3px; overflow:hidden; margin-bottom:8px; }
+.progress-bar-fill { height:100%; border-radius:3px; background:linear-gradient(90deg, var(--sky), var(--amber)); }
+.progress-labels { display:flex; justify-content:space-between; font-size:10px; }
+.progress-labels span { color:rgba(255,255,255,0.35); font-weight:300; }
+.progress-labels .right { color:var(--sky); font-weight:600; }
+
+/* ── Bottom Nav ── */
+.bottom-nav { position:absolute; bottom:0; left:0; right:0; height:80px; background:rgba(255,255,255,0.93); backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px); border-top:1px solid rgba(59,130,246,0.08); display:flex; align-items:center; padding:0 8px 12px; z-index:100; }
+.nav-btn { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:6px 0; border:none; background:transparent; cursor:pointer; font-family:'Inter',sans-serif; transition:color 0.18s; }
+.nav-ico-wrap { width:28px; height:24px; display:flex; align-items:center; justify-content:center; border-radius:8px; transition:background 0.18s; }
+.nav-btn.active .nav-ico-wrap { background:var(--blue-bg); }
+.nav-ico-wrap svg { width:14px; height:14px; transition:stroke 0.18s; }
+.nav-lbl { font-size:9px; font-weight:500; color:var(--light); letter-spacing:0.02em; }
+.nav-btn.active .nav-lbl { color:var(--blue); font-weight:600; }
+
+.fade-in { animation:fu 0.35s ease both; }
+@keyframes fu { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+@keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-8px)} 40%{transform:translateX(8px)} 60%{transform:translateX(-6px)} 80%{transform:translateX(6px)} }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ══ Login ══ -->
+  <div class="login-screen" id="loginScreen">
+    <div class="login-logo">💰</div>
+    <div class="login-title">我的記帳</div>
+    <div class="login-sub">請輸入密碼</div>
+    <div class="pin-dots" id="pinDots">
+      <div class="pin-dot" id="d0"></div>
+      <div class="pin-dot" id="d1"></div>
+      <div class="pin-dot" id="d2"></div>
+      <div class="pin-dot" id="d3"></div>
+      <div class="pin-dot" id="d4"></div>
+      <div class="pin-dot" id="d5"></div>
+    </div>
+    <div class="pin-keypad">
+      <div class="pin-key" onclick="pinInput('1')">1</div>
+      <div class="pin-key" onclick="pinInput('2')">2</div>
+      <div class="pin-key" onclick="pinInput('3')">3</div>
+      <div class="pin-key" onclick="pinInput('4')">4</div>
+      <div class="pin-key" onclick="pinInput('5')">5</div>
+      <div class="pin-key" onclick="pinInput('6')">6</div>
+      <div class="pin-key" onclick="pinInput('7')">7</div>
+      <div class="pin-key" onclick="pinInput('8')">8</div>
+      <div class="pin-key" onclick="pinInput('9')">9</div>
+      <div class="pin-key empty"></div>
+      <div class="pin-key" onclick="pinInput('0')">0</div>
+      <div class="pin-key del" onclick="pinDel()">⌫</div>
+    </div>
+    <div class="login-error" id="loginError"></div>
+  </div>
+
+  <!-- ══ Login Screen ══ -->
+  <div class="login-screen" id="loginScreen">
+    <div style="font-size:48px;margin-bottom:16px;">💰</div>
+    <div style="font-size:24px;font-weight:800;color:var(--text);letter-spacing:-0.03em;margin-bottom:6px;">我的記帳</div>
+    <div style="font-size:13px;color:var(--muted);font-weight:300;margin-bottom:40px;">請輸入密碼</div>
+    <div class="pin-dots" id="pinDots">
+      <div class="pin-dot" id="d0"></div>
+      <div class="pin-dot" id="d1"></div>
+      <div class="pin-dot" id="d2"></div>
+      <div class="pin-dot" id="d3"></div>
+      <div class="pin-dot" id="d4"></div>
+      <div class="pin-dot" id="d5"></div>
+    </div>
+    <div class="pin-keypad">
+      <div class="pin-key" onclick="pinInput('1')">1</div>
+      <div class="pin-key" onclick="pinInput('2')">2</div>
+      <div class="pin-key" onclick="pinInput('3')">3</div>
+      <div class="pin-key" onclick="pinInput('4')">4</div>
+      <div class="pin-key" onclick="pinInput('5')">5</div>
+      <div class="pin-key" onclick="pinInput('6')">6</div>
+      <div class="pin-key" onclick="pinInput('7')">7</div>
+      <div class="pin-key" onclick="pinInput('8')">8</div>
+      <div class="pin-key" onclick="pinInput('9')">9</div>
+      <div class="pin-key pin-empty"></div>
+      <div class="pin-key" onclick="pinInput('0')">0</div>
+      <div class="pin-key pin-del" onclick="pinDel()">⌫</div>
+    </div>
+    <div style="font-size:13px;color:var(--red);margin-top:16px;min-height:20px;font-weight:500;" id="loginError"></div>
+  </div>
+
+  <!-- Loading -->
+  <div class="loading-overlay hidden" id="loadingOverlay">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">載入資料中…</div>
+  </div>
+
+  <!-- Donut Tooltip -->
+  <div style="position:fixed;z-index:9999;background:#fff;border:1px solid #DBEAFE;border-radius:14px;padding:12px 16px;pointer-events:none;opacity:0;transition:opacity 0.15s;box-shadow:0 8px 24px rgba(59,130,246,0.12);min-width:120px;" id="dTip">
+    <div style="font-size:9px;color:var(--muted);margin-bottom:4px;font-weight:500;text-transform:uppercase;letter-spacing:0.05em" id="dtN"></div>
+    <div style="font-size:17px;font-weight:800;margin-bottom:2px" id="dtV"></div>
+    <div style="font-size:10px;color:var(--light)" id="dtP"></div>
+  </div>
+
+  <!-- ══ 總覽 ══ -->
+  <div class="page active" id="page-home">
+    <div class="header">
+      <div class="header-row">
+        <div><div class="greeting" id="homeGreeting">載入中…</div><div class="page-title">財務總覽</div></div>
+        <button class="refresh-btn" id="refreshHome" onclick="refreshPage()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1 4v6h6M23 20v-6h-6"/>
+            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div class="error-banner" id="errorBanner">⚠️ 無法載入資料，請點右上角重新整理</div>
+
+    <div style="padding:4px 20px 0;">
+      <div class="hero-card fade-in">
+        <div class="hero-tag"><span class="hero-tag-dot"></span>本月結餘</div>
+        <div class="hero-amount" id="heroBalance"><span>$</span>—</div>
+        <div class="hero-stats">
+          <div class="hero-stat"><div class="hs-label">收入</div><div class="hs-val" id="heroIncome">—</div></div>
+          <div class="hero-stat"><div class="hs-label">支出</div><div class="hs-val" id="heroExpense">—</div></div>
+          <div class="hero-stat"><div class="hs-label">投資</div><div class="hs-val" id="heroInvest">—</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">收入 vs 支出趨勢</div>
+      <div class="card">
+        <div class="chart-info-row">
+          <div class="chart-info-card">
+            <div class="ci-month" id="ciMonth">—</div>
+            <div class="ci-row"><div class="ci-dot" style="background:var(--blue)"></div><div class="ci-lbl">收入</div><div class="ci-val" id="ciIncome" style="color:var(--blue)">—</div></div>
+            <div class="ci-row"><div class="ci-dot" style="background:var(--red)"></div><div class="ci-lbl">支出</div><div class="ci-val" id="ciExpense" style="color:var(--red)">—</div></div>
+            <div class="ci-row"><div class="ci-dot" style="background:var(--amber)"></div><div class="ci-lbl">結餘</div><div class="ci-val" id="ciBalance" style="color:var(--amber)">—</div></div>
+          </div>
+          <div class="lc-legend-col">
+            <div class="lc-item"><div class="lc-dot" style="background:var(--blue)"></div>收入</div>
+            <div class="lc-item"><div class="lc-dot" style="background:var(--red)"></div>支出</div>
+            <div class="lc-item"><div class="lc-line" style="background:var(--amber)"></div>結餘</div>
+          </div>
+        </div>
+        <div style="padding-left:30px;overflow:visible;">
+          <svg id="comboSvg" viewBox="0 0 300 120" width="100%" style="overflow:visible;display:block;">
+            <defs>
+              <linearGradient id="gBlue" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#3B82F6" stop-opacity="0.7"/>
+                <stop offset="100%" stop-color="#3B82F6" stop-opacity="0.2"/>
+              </linearGradient>
+              <linearGradient id="gRed" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#F87171" stop-opacity="0.7"/>
+                <stop offset="100%" stop-color="#F87171" stop-opacity="0.2"/>
+              </linearGradient>
+            </defs>
+            <line x1="0" y1="0"   x2="300" y2="0"   stroke="#DBEAFE" stroke-width="1"/>
+            <line x1="0" y1="40"  x2="300" y2="40"  stroke="#DBEAFE" stroke-width="1"/>
+            <line x1="0" y1="80"  x2="300" y2="80"  stroke="#DBEAFE" stroke-width="1"/>
+            <line x1="0" y1="119" x2="300" y2="119" stroke="#DBEAFE" stroke-width="1"/>
+            <text id="yL1" x="-4" y="4"   fill="#A0BDD8" font-size="8" text-anchor="end" font-family="Inter"></text>
+            <text id="yL2" x="-4" y="44"  fill="#A0BDD8" font-size="8" text-anchor="end" font-family="Inter"></text>
+            <text id="yL3" x="-4" y="84"  fill="#A0BDD8" font-size="8" text-anchor="end" font-family="Inter"></text>
+            <text id="yL4" x="-4" y="123" fill="#A0BDD8" font-size="8" text-anchor="end" font-family="Inter"></text>
+            <g id="comboContent"></g>
+          </svg>
+        </div>
+        <div class="x-labels" id="xLabels"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 分類 ══ -->
+  <div class="page" id="page-cat">
+    <div class="header">
+      <div class="header-row">
+        <div><div class="greeting">支出分析</div><div class="page-title">每月分類</div></div>
+        <button class="refresh-btn" onclick="refreshPage()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1 4v6h6M23 20v-6h-6"/>
+            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div style="padding:0 20px;">
+      <div class="cat-month-nav">
+        <button class="cat-month-btn" onclick="catPrevMonth()">‹</button>
+        <div class="cat-month-label" id="catMonthLabel">—</div>
+        <button class="cat-month-btn" onclick="catNextMonth()">›</button>
+      </div>
+      <div class="card" style="margin-bottom:0;">
+        <div class="donut-big-wrap">
+          <div style="position:relative;width:190px;height:190px;">
+            <svg width="190" height="190" viewBox="0 0 190 190">
+              <circle cx="95" cy="95" r="70" fill="none" stroke="#EFF6FF" stroke-width="26"/>
+              <g id="bigDonutArcs"></g>
+              <text x="95" y="89" text-anchor="middle" fill="#A0BDD8" font-size="10" font-family="Inter" font-weight="300">總支出</text>
+              <text id="bigDonutTotal" x="95" y="107" text-anchor="middle" fill="#1E3A5F" font-size="16" font-family="Inter" font-weight="800">—</text>
+            </svg>
+            <svg id="pctLabelsSvg" style="position:absolute;top:0;left:0;width:190px;height:190px;pointer-events:none;overflow:visible;"></svg>
+          </div>
+        </div>
+        <div id="donutLegendWrap" class="donut-tags-wrap"></div>
+      </div>
+    </div>
+    <div style="padding:12px 20px 0;" id="catList"></div>
+  </div>
+
+  <!-- ══ 明細 ══ -->
+  <div class="page" id="page-detail">
+    <div class="header">
+      <div class="header-row">
+        <div><div class="greeting">搜尋與篩選</div><div class="page-title">所有明細</div></div>
+        <button class="refresh-btn" onclick="refreshPage()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1 4v6h6M23 20v-6h-6"/>
+            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div style="padding:0 20px;">
+      <div class="sticky-top">
+        <div class="search-wrap">
+          <div class="search-box">
+            <span class="search-ico">🔍</span>
+            <input type="text" id="searchInput" placeholder="搜尋項目名稱、類別…" oninput="applyFilters()">
+          </div>
+        </div>
+        <div class="chips-row" id="catChips">
+          <button class="chip active" data-cat="全部" onclick="selCat(this)">全部</button>
+          <button class="chip" data-cat="餐飲" onclick="selCat(this)">🍜 餐飲</button>
+          <button class="chip" data-cat="交通" onclick="selCat(this)">🚇 交通</button>
+          <button class="chip" data-cat="娛樂" onclick="selCat(this)">🎬 娛樂</button>
+          <button class="chip" data-cat="訂閱" onclick="selCat(this)">📱 訂閱</button>
+          <button class="chip" data-cat="投資" onclick="selCat(this)">📈 投資</button>
+          <button class="chip" data-cat="薪資" onclick="selCat(this)">💰 薪資</button>
+          <button class="chip" data-cat="其他" onclick="selCat(this)">📦 其他</button>
+        </div>
+      </div>
+      <div class="date-card">
+        <div class="date-label">篩選時間區間</div>
+        <div class="date-row">
+          <input type="date" class="date-in" id="dateFrom" onchange="applyFilters()">
+          <span class="date-sep">—</span>
+          <input type="date" class="date-in" id="dateTo" onchange="applyFilters()">
+        </div>
+        <span class="date-clear" onclick="clearDates()">✕ 清除日期篩選</span>
+      </div>
+      <div class="results-row">
+        <div class="results-count" id="rCount">共 0 筆</div>
+        <div class="results-sum" id="rSum"></div>
+      </div>
+      <div class="card" style="padding:4px 14px;">
+        <div class="tx-list" id="detailList"></div>
+      </div>
+      <div class="empty" id="emptyState" style="display:none">
+        <div class="empty-ico">🔎</div><div class="empty-txt">找不到符合條件的記錄</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 薪資 ══ -->
+  <div class="page" id="page-salary">
+    <div class="header">
+      <div class="header-row">
+        <div><div class="greeting">薪資記錄</div><div class="page-title">收入管理</div></div>
+        <button class="refresh-btn" onclick="refreshPage()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1 4v6h6M23 20v-6h-6"/>
+            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div style="padding:0 20px;">
+      <div class="salary-hero">
+        <div class="sal-label">本月薪資</div>
+        <div class="sal-amount" id="salAmount"><span>$</span>—</div>
+        <div class="sal-sub" id="salSub">載入中</div>
+        <div class="progress-bar-wrap"><div class="progress-bar-fill" id="salProgress" style="width:0%"></div></div>
+        <div class="progress-labels">
+          <span id="salSpent">已花費 —</span>
+          <span class="right" id="salLeft">剩餘 —</span>
+        </div>
+      </div>
+      <div class="section-title" style="padding:16px 0 10px;">薪資歷史</div>
+      <div class="card" style="padding:4px 14px;">
+        <div class="tx-list" id="salaryList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Nav -->
+  <nav class="bottom-nav">
+    <button class="nav-btn active" onclick="switchPage('home',this)">
+      <div class="nav-ico-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1z"/><path d="M9 21V12h6v9"/></svg>
+      </div>
+      <span class="nav-lbl" style="color:var(--blue)">總覽</span>
+    </button>
+    <button class="nav-btn" onclick="switchPage('cat',this)">
+      <div class="nav-ico-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#A0BDD8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 0 1 10 10"/><path d="M12 2v10l6.5 6.5"/><circle cx="12" cy="12" r="10"/></svg>
+      </div>
+      <span class="nav-lbl">分類</span>
+    </button>
+    <button class="nav-btn" onclick="switchPage('detail',this)">
+      <div class="nav-ico-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#A0BDD8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="7" y1="9" x2="17" y2="9"/><line x1="7" y1="13" x2="17" y2="13"/><line x1="7" y1="17" x2="13" y2="17"/></svg>
+      </div>
+      <span class="nav-lbl">明細</span>
+    </button>
+    <button class="nav-btn" onclick="switchPage('salary',this)">
+      <div class="nav-ico-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#A0BDD8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><circle cx="12" cy="14" r="3"/><path d="M6 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"/></svg>
+      </div>
+      <span class="nav-lbl">薪資</span>
+    </button>
+  </nav>
+</div>
+
+<script>
+// ══ Config ══
+const API = 'https://script.google.com/macros/s/AKfycbwLndySlny5jcXaKHzlfkTZQd7cgfOG8GNPznHM78k1Eg9n_N1H4mtVNYXVAHS6Ss0Dhw/exec';
+const TOKEN_KEY  = 'budget_token';
+const TOKEN_DAYS = 7;
+
+let allTx = [];
+let comboData = [];
+let catYear, catMonth;
+let selectedMonthIdx = -1;
+const COLORS = ['#3B82F6','#F87171','#F59E0B','#60A5FA','#A78BFA','#34D399','#FB923C'];
+
+// ══ Auth ══
+let pinBuffer = '';
+
+function checkToken() {
+  try {
+    const t = JSON.parse(localStorage.getItem(TOKEN_KEY));
+    if (t && t.expiry > Date.now()) {
+      document.getElementById('loginScreen').classList.add('gone');
+      init();
+    }
+  } catch(e) {}
+}
+
+function pinInput(n) {
+  if (pinBuffer.length >= 6) return;
+  pinBuffer += n;
+  updateDots();
+  if (pinBuffer.length === 6) setTimeout(submitPin, 150);
+}
+
+function pinDel() {
+  pinBuffer = pinBuffer.slice(0,-1);
+  updateDots();
+}
+
+function updateDots() {
+  for (let i=0;i<6;i++) {
+    document.getElementById('d'+i).classList.toggle('filled', i < pinBuffer.length);
+  }
+}
+
+async function submitPin() {
+  const pw = pinBuffer;
+  pinBuffer = '';
+  updateDots();
+  try {
+    const res = await fetch(`${API}?action=auth&pw=${encodeURIComponent(pw)}`);
+    const data = await res.json();
+    if (data.ok) {
+      const expiry = Date.now() + TOKEN_DAYS * 86400000;
+      localStorage.setItem(TOKEN_KEY, JSON.stringify({ expiry }));
+      const ls = document.getElementById('loginScreen');
+      ls.classList.add('hidden');
+      setTimeout(() => ls.classList.add('gone'), 400);
+      document.getElementById('loginError').textContent = '';
+      init();
+    } else {
+      document.getElementById('loginError').textContent = '密碼錯誤，請再試一次';
+      const dots = document.getElementById('pinDots');
+      dots.style.animation = 'none';
+      dots.offsetHeight;
+      dots.style.animation = 'shake 0.4s ease';
+    }
+  } catch(e) {
+    document.getElementById('loginError').textContent = '網路錯誤，請稍後再試';
+  }
+}
+
+// ══ Data ══
+async function init() {
+  document.getElementById('loadingOverlay').classList.remove('hidden');
+  await loadData();
+}
+
+async function loadData() {
+  document.getElementById('errorBanner').classList.remove('show');
+  try {
+    const res  = await fetch(`${API}?action=read&t=${Date.now()}`);
+    const json = await res.json();
+    allTx = (json.data || []).map(r => {
+      const txType = r.type==='收入'?'income': r.type==='投資'?'invest':'expense';
+      return { ...r, txType, icon: catIcon(r.category, txType) };
+    }).filter(r=>r.date&&r.name).sort((a,b)=>b.date.localeCompare(a.date));
+    renderAll();
+  } catch(e) {
+    document.getElementById('errorBanner').classList.add('show');
+  }
+  document.getElementById('loadingOverlay').classList.add('hidden');
+}
+
+function refreshPage() {
+  const btns = document.querySelectorAll('.refresh-btn');
+  btns.forEach(b=>b.classList.add('spinning'));
+  loadData().finally(()=>{
+    btns.forEach(b=>b.classList.remove('spinning'));
+  });
+}
+
+function catIcon(cat, type) {
+  const map={'餐飲':'🍜','交通':'🚇','娛樂':'🎬','訂閱':'📱','投資':'📈','薪資':'💰','其他':'📦'};
+  if(type==='income') return '💰';
+  if(type==='invest') return '📈';
+  return map[cat]||'💳';
+}
+
+function renderAll() {
+  const now=new Date(), cy=now.getFullYear(), cm=now.getMonth()+1;
+  const curYM=`${cy}/${String(cm).padStart(2,'0')}`;
+  document.getElementById('homeGreeting').textContent=`${cm}月・${cy}`;
+  const thisMonth=allTx.filter(t=>t.date.startsWith(curYM));
+  const income =thisMonth.filter(t=>t.txType==='income').reduce((s,t)=>s+t.amount,0);
+  const expense=thisMonth.filter(t=>t.txType==='expense').reduce((s,t)=>s+Math.abs(t.amount),0);
+  const invest =thisMonth.filter(t=>t.txType==='invest').reduce((s,t)=>s+Math.abs(t.amount),0);
+  const balance=income-expense-invest;
+  const sign=balance>=0?'+$':'-$';
+  document.getElementById('heroBalance').innerHTML=`<span>${sign}</span>${Math.abs(balance).toLocaleString()}`;
+  document.getElementById('heroIncome').textContent='+$'+income.toLocaleString();
+  document.getElementById('heroExpense').textContent='-$'+expense.toLocaleString();
+  document.getElementById('heroInvest').textContent='-$'+invest.toLocaleString();
+  renderComboChart(cy,cm);
+  catYear=cy; catMonth=cm;
+  renderCatPage();
+  renderSalary(curYM,income,expense);
+  applyFilters();
+}
+
+function renderComboChart(cy,cm) {
+  comboData=[];
+  const count=Math.min(cm,6);
+  for(let i=count-1;i>=0;i--){
+    let m=cm-i,y=cy;
+    if(m<=0){m+=12;y--;}
+    const ym=`${y}/${String(m).padStart(2,'0')}`;
+    const mx=allTx.filter(t=>t.date.startsWith(ym));
+    const inc=mx.filter(t=>t.txType==='income').reduce((s,t)=>s+t.amount,0);
+    const exp=mx.filter(t=>t.txType==='expense').reduce((s,t)=>s+Math.abs(t.amount),0);
+    const inv=mx.filter(t=>t.txType==='invest').reduce((s,t)=>s+Math.abs(t.amount),0);
+    comboData.push({month:m+'月',income:inc,expense:exp,invest:inv,balance:inc-exp-inv});
+  }
+  const allVals=comboData.flatMap(d=>[d.income,d.expense,Math.abs(d.balance)]).filter(v=>v>0);
+  const maxVal=allVals.length?Math.max(...allVals):100000;
+  const rMax=Math.ceil(maxVal/10000)*10000;
+  const H=119,W=300,n=comboData.length;
+  if(!n)return;
+  function yp(v){return H-Math.round((Math.max(0,v)/rMax)*H);}
+  function fmt(v){return v>=1000?Math.round(v/1000)+'K':v;}
+  document.getElementById('yL1').textContent=fmt(rMax);
+  document.getElementById('yL2').textContent=fmt(rMax*0.67);
+  document.getElementById('yL3').textContent=fmt(rMax*0.33);
+  document.getElementById('yL4').textContent='0';
+  document.getElementById('xLabels').innerHTML=comboData.map((d,i)=>`<span class="x-lbl${i===selectedMonthIdx||i===n-1?' sel':''}">${d.month}</span>`).join('');
+  const slotW=W/n, barW=Math.max(8,slotW*0.28), gap=3;
+  let bars='',linePts=[];
+  comboData.forEach((d,i)=>{
+    const cx=slotW*i+slotW/2;
+    const ih=H-yp(d.income), eh=H-yp(d.expense);
+    const bx1=cx-barW-gap/2, bx2=cx+gap/2;
+    const iy=H-ih, ey=H-eh;
+    const sel=i===selectedMonthIdx||(selectedMonthIdx===-1&&i===n-1);
+    const opacity=sel?1:0.25;
+    bars+=`
+      <rect class="bar-inc" data-i="${i}" x="${bx1.toFixed(1)}" y="${iy}" width="${barW.toFixed(1)}" height="${ih}" rx="4"
+        fill="url(#gBlue)" opacity="${opacity}" style="cursor:pointer" onclick="selectMonth(${i})"/>
+      <rect class="bar-exp" data-i="${i}" x="${bx2.toFixed(1)}" y="${ey}" width="${barW.toFixed(1)}" height="${eh}" rx="4"
+        fill="url(#gRed)" opacity="${opacity}" style="cursor:pointer" onclick="selectMonth(${i})"/>`;
+    linePts.push({x:cx,y:yp(d.balance),bal:d.balance,sel});
+  });
+  const lpts=linePts.map(p=>`${p.x.toFixed(1)},${p.y}`).join(' ');
+  let lineSvg=`<polyline points="${lpts}" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.4"/>`;
+  linePts.forEach((p,i)=>{
+    const op=p.sel?1:0.3;
+    lineSvg+=`<circle data-i="${i}" cx="${p.x.toFixed(1)}" cy="${p.y}" r="5" fill="transparent" style="cursor:pointer" onclick="selectMonth(${i})"/>
+    <circle cx="${p.x.toFixed(1)}" cy="${p.y}" r="3.5" fill="white" stroke="#F59E0B" stroke-width="2" opacity="${op}" pointer-events="none"/>`;
+  });
+  document.getElementById('comboContent').innerHTML=bars+lineSvg;
+  const initIdx=selectedMonthIdx>=0?selectedMonthIdx:n-1;
+  selectMonth(initIdx,true);
+}
+
+function selectMonth(i,silent=false) {
+  selectedMonthIdx=i;
+  const d=comboData[i], n=comboData.length;
+  document.getElementById('ciMonth').textContent=d.month;
+  document.getElementById('ciIncome').textContent='+$'+d.income.toLocaleString();
+  document.getElementById('ciExpense').textContent='-$'+d.expense.toLocaleString();
+  const b=d.balance;
+  document.getElementById('ciBalance').textContent=(b>=0?'+':'-')+'$'+Math.abs(b).toLocaleString();
+  document.getElementById('ciBalance').style.color=b>=0?'var(--amber)':'var(--red)';
+  document.querySelectorAll('.bar-inc,.bar-exp').forEach(el=>{
+    el.style.opacity=parseInt(el.dataset.i)===i?'1':'0.25';
+  });
+  document.getElementById('xLabels').innerHTML=comboData.map((d,j)=>`<span class="x-lbl${j===i?' sel':''}">${d.month}</span>`).join('');
+}
+
+function catPrevMonth(){catMonth--;if(catMonth<1){catMonth=12;catYear--;}renderCatPage();}
+function catNextMonth(){const n=new Date();if(catYear>n.getFullYear()||(catYear===n.getFullYear()&&catMonth>=n.getMonth()+1))return;catMonth++;if(catMonth>12){catMonth=1;catYear++;}renderCatPage();}
+
+function renderCatPage() {
+  const ym=`${catYear}/${String(catMonth).padStart(2,'0')}`;
+  document.getElementById('catMonthLabel').textContent=`${catYear}年 ${catMonth}月`;
+  const expTx=allTx.filter(t=>t.date.startsWith(ym)&&t.txType==='expense');
+  const cats={};
+  expTx.forEach(tx=>{cats[tx.category]=(cats[tx.category]||{sum:0,count:0});cats[tx.category].sum+=Math.abs(tx.amount);cats[tx.category].count++;});
+  const sorted=Object.entries(cats).sort((a,b)=>b[1].sum-a[1].sum);
+  const total=sorted.reduce((s,[,v])=>s+v.sum,0);
+  const C=2*Math.PI*70; let offset=C*0.25;
+  let arcs='',pctLbls='',legHtml='',catHtml='';
+  sorted.forEach(([cat,{sum,count}],i)=>{
+    const pct=total>0?sum/total:0, dash=pct*C, gap=C-dash;
+    const color=COLORS[i%COLORS.length], pctStr=Math.round(pct*100)+'%';
+    const midAngle=(offset-C*0.25+dash/2)/70;
+    const lr=90, lx=95+lr*Math.cos(midAngle), ly=95+lr*Math.sin(midAngle);
+    arcs+=`<circle cx="95" cy="95" r="70" fill="none" stroke="${color}" stroke-width="26"
+      stroke-dasharray="${dash.toFixed(1)} ${gap.toFixed(1)}"
+      stroke-dashoffset="-${(offset-C*0.25).toFixed(1)}"
+      stroke-linecap="round" style="cursor:pointer"
+      data-name="${cat}" data-val="$${sum.toLocaleString()}" data-pct="${pctStr}" data-color="${color}"
+      onmouseenter="showDTip(event,this)" ontouchstart="showDTip(event,this)"
+      onmouseleave="hTip('dTip')" ontouchend="hTip('dTip')"/>`;
+    if(pct>0.07)pctLbls+=`<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" fill="${color}" font-size="9" font-family="Inter" font-weight="700">${pctStr}</text>`;
+    offset+=dash;
+    legHtml+=`<div class="donut-legend-row">
+      <div class="dleg-dot" style="background:${color}"></div>
+      <div class="dleg-name">${cat}</div>
+    </div>`;
+    catHtml+=`<div class="cat-list-row">
+      <div class="cat-icon-wrap" style="background:${color}18">${catIcon(cat,'expense')}</div>
+      <div class="cat-info">
+        <div class="cat-name">${cat} <span style="color:var(--light);font-size:10px;font-weight:300">(${count}筆)</span></div>
+        <div class="cat-bar-track"><div class="cat-bar-fill" style="width:${Math.round(pct*100)}%;background:${color}"></div></div>
+      </div>
+      <div class="cat-right">
+        <div class="cat-val" style="color:${color}">$${sum.toLocaleString()}</div>
+        <div class="cat-pct">${pctStr}</div>
+      </div>
+    </div>`;
+  });
+  document.getElementById('bigDonutArcs').innerHTML=arcs;
+  document.getElementById('bigDonutTotal').textContent=total>0?total.toLocaleString():'—';
+  document.getElementById('donutLegendWrap').innerHTML=legHtml||'';
+  document.getElementById('catList').innerHTML=catHtml||'<div class="empty"><div class="empty-ico">🎉</div><div class="empty-txt">本月無支出記錄</div></div>';
+  const ps=document.getElementById('pctLabelsSvg');
+  if(ps)ps.innerHTML=pctLbls;
+}
+
+function renderSalary(curYM,income,expense){
+  document.getElementById('salAmount').innerHTML=`<span>$</span>${income.toLocaleString()}`;
+  document.getElementById('salSub').textContent=curYM+' 入帳';
+  const pct=income>0?Math.min(100,Math.round(expense/income*100)):0;
+  document.getElementById('salProgress').style.width=pct+'%';
+  document.getElementById('salSpent').textContent='已花費 $'+expense.toLocaleString();
+  document.getElementById('salLeft').textContent='剩餘 $'+Math.max(0,income-expense).toLocaleString();
+  const salTx=allTx.filter(t=>t.txType==='income');
+  document.getElementById('salaryList').innerHTML=salTx.slice(0,10).map(tx=>`
+    <div class="tx-row">
+      <div class="tx-icon-wrap" style="background:var(--blue-bg)">${tx.icon}</div>
+      <div class="tx-info"><div class="tx-name">${tx.name}</div><div class="tx-meta">${tx.date}・${tx.category}</div></div>
+      <div class="tx-amt" style="color:var(--blue)">+$${tx.amount.toLocaleString()}</div>
+    </div>`).join('')||'<div class="empty"><div class="empty-ico">💰</div><div class="empty-txt">尚無收入記錄</div></div>';
+}
+
+function switchPage(id,btn){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>{
+    b.classList.remove('active');
+    const ico=b.querySelector('.nav-ico-wrap svg');
+    if(ico)ico.setAttribute('stroke','#A0BDD8');
+    const lbl=b.querySelector('.nav-lbl');
+    if(lbl)lbl.style.color='';
+  });
+  document.getElementById('page-'+id).classList.add('active');
+  btn.classList.add('active');
+  const ico=btn.querySelector('.nav-ico-wrap svg');
+  if(ico)ico.setAttribute('stroke','#3B82F6');
+  const lbl=btn.querySelector('.nav-lbl');
+  if(lbl)lbl.style.color='var(--blue)';
+  document.getElementById('page-'+id).scrollTop=0;
+  if(id==='detail')applyFilters();
+  if(id==='cat')renderCatPage();
+}
+
+function hTip(id){document.getElementById(id).classList.remove('vis');document.getElementById(id).style.opacity='0';}
+function showDTip(e,el){
+  e.stopPropagation();
+  const t=document.getElementById('dTip');
+  document.getElementById('dtN').textContent=el.dataset.name;
+  document.getElementById('dtV').style.color=el.dataset.color;
+  document.getElementById('dtV').textContent=el.dataset.val;
+  document.getElementById('dtP').textContent='佔比 '+el.dataset.pct;
+  t.style.opacity='1';
+  const cx=e.touches?e.touches[0].clientX:e.clientX,cy=e.touches?e.touches[0].clientY:e.clientY;
+  const tw=t.offsetWidth||130,th=t.offsetHeight||80,vw=window.innerWidth,vh=window.innerHeight;
+  let x=cx+14,y=cy-th/2;
+  if(x+tw>vw-8)x=cx-tw-14;if(y<8)y=8;if(y+th>vh-8)y=vh-th-8;
+  t.style.left=x+'px';t.style.top=y+'px';
+}
+function showDLeg(e,name,val,pct,color){
+  e.stopPropagation();
+  document.getElementById('dtN').textContent=name;
+  document.getElementById('dtV').style.color=color;
+  document.getElementById('dtV').textContent=val;
+  document.getElementById('dtP').textContent='佔比 '+pct;
+  showDTip(e,{dataset:{name,val,pct,color}});
+  document.getElementById('dTip').style.opacity='1';
+  const t=document.getElementById('dTip');
+  const cx=e.touches?e.touches[0].clientX:e.clientX,cy=e.touches?e.touches[0].clientY:e.clientY;
+  const tw=t.offsetWidth||130,th=t.offsetHeight||80,vw=window.innerWidth,vh=window.innerHeight;
+  let x=cx+14,y=cy-th/2;
+  if(x+tw>vw-8)x=cx-tw-14;if(y<8)y=8;if(y+th>vh-8)y=vh-th-8;
+  t.style.left=x+'px';t.style.top=y+'px';
+}
+document.addEventListener('click',()=>{hTip('dTip');});
+
+let curCat='全部';
+function selCat(el){document.querySelectorAll('#catChips .chip').forEach(c=>c.classList.remove('active'));el.classList.add('active');curCat=el.dataset.cat;applyFilters();}
+function clearDates(){document.getElementById('dateFrom').value='';document.getElementById('dateTo').value='';applyFilters();}
+function hl(t,q){if(!q)return t;return t.replace(new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`,'gi'),'<span class="highlight">$1</span>');}
+function applyFilters(){
+  const q=document.getElementById('searchInput').value.trim().toLowerCase();
+  const from=document.getElementById('dateFrom').value.replace(/-/g,'/');
+  const to=document.getElementById('dateTo').value.replace(/-/g,'/');
+  const f=allTx.filter(tx=>(curCat==='全部'||tx.category===curCat)&&(!q||tx.name.toLowerCase().includes(q)||tx.category.toLowerCase().includes(q))&&(!from||tx.date>=from)&&(!to||tx.date<=to));
+  document.getElementById('rCount').textContent=`共 ${f.length} 筆`;
+  const total=f.reduce((s,t)=>s+t.amount,0);
+  const se=document.getElementById('rSum');
+  if(f.length){const c=total>=0?'var(--blue)':'var(--red)';se.innerHTML=`<span style="color:${c}">${total>=0?'+':''}$${Math.abs(total).toLocaleString()}</span>`;}else se.textContent='';
+  const list=document.getElementById('detailList');
+  const empty=document.getElementById('emptyState');
+  if(!f.length){list.innerHTML='';empty.style.display='block';return;}
+  empty.style.display='none';
+  const bgMap={income:'var(--blue-bg)',expense:'var(--red-bg)',invest:'var(--amber-bg)'};
+  const clMap={income:'var(--blue)',expense:'var(--red)',invest:'var(--amber)'};
+  list.innerHTML=f.map(tx=>{
+    const sign=tx.amount>0?'+':'';
+    return `<div class="tx-row">
+      <div class="tx-icon-wrap" style="background:${bgMap[tx.txType]}">${tx.icon}</div>
+      <div class="tx-info"><div class="tx-name">${hl(tx.name,q)}</div><div class="tx-meta">${tx.date}・${hl(tx.category,q)}</div></div>
+      <div class="tx-amt" style="color:${clMap[tx.txType]}">${sign}$${Math.abs(tx.amount).toLocaleString()}</div>
+    </div>`;
+  }).join('');
+}
+
+// Init
+const _style=document.createElement('style');
+_style.textContent='@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}';
+document.head.appendChild(_style);
+checkToken();
+</script>
+</body>
+</html>
